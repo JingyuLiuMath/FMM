@@ -1,8 +1,8 @@
-function potential = DirectlyCompute(source_points, source_charges, target_points)
-% DirectlyCompute Compute potential from source points to target points
+function potential = DirectCompute(source_points, source_charges, target_points)
+% DirectCompute Compute potential from source points to target points
 % directly.
 
-% Jingyu Liu, November 11, 2022.
+% Jingyu Liu, November 14, 2022.
 
 arguments
     source_points(:, 2);

@@ -3,10 +3,10 @@ classdef uniformFMM_Tree < handle
     % square [0, 1]^2.
     
     % Reference:
-    % J. Carrier, L. Greengard, and V. Rokhlin. A fast adaptive multipole algorithm for particle 
-    % simulations. SIAM journal on scientific and statistical computing, 9(4):669–686, 1988.
+    % L. Greengard and V. Rokhlin. A fast algorithm for particle simulations. Journal of 
+    % computational physics, 135(2):280–292, 1997.
     
-    % Jingyu Liu, November 11, 2022.
+    % Jingyu Liu, November 14, 2022.
     
     properties
         % Tree information.
@@ -14,7 +14,6 @@ classdef uniformFMM_Tree < handle
         order_ = 0;
         num_level_ = 0;  % In fact, it is the highest level in the subtree whose root is the node.
         leaf_ = 0;  % Whether it is a leaf node.
-        root_;
         parent_;
         children_;
         neighbor_list_ = {};
@@ -39,7 +38,7 @@ classdef uniformFMM_Tree < handle
         function obj = uniformFMM_Tree(source_points, source_charges, source_order, ...
                 level, order, ...
                 center, half_length)
-            % FMM_TREE Constructor.
+            % uniformFMM_TREE Constructor.
             arguments
                 source_points(:, 2);
                 source_charges(:, 1);
@@ -58,7 +57,8 @@ classdef uniformFMM_Tree < handle
             obj.center_ = center;
             obj.half_length_ = half_length;
             if obj.level_ == 0
-                num_level = ceil(log2(length(obj.source_charges_)) / 2);
+                min_vtx = 512;  % The number of particles in each leaf box is nearly min_vtx. 
+                num_level = ceil(log2(length(obj.source_charges_) / min_vtx) / 2);
                 obj = BuildTree(obj, num_level);
                 obj = SetList(obj);
             end
@@ -66,7 +66,7 @@ classdef uniformFMM_Tree < handle
         end
         
         function obj = BuildTree(obj, num_level)
-            % BuilTree Build a FMM tree.
+            % BuilTree Build an FMM tree.
             
             if obj.level_ == num_level
                 obj.num_level_ = obj.level_;
@@ -184,7 +184,7 @@ classdef uniformFMM_Tree < handle
         % FMM algorithm.
         function obj = FMM_Alg(obj, tol)
             % FMM_Alg FMM algorithms.
-            p = ceil(-log2(tol));  % Number of expansion items.
+            p = ceil(-log2(tol));  % Number of expansion terms.
             
             % S2M and M2M.
             for tmplevel = obj.num_level_ : -1 : 0

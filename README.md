@@ -4,8 +4,6 @@ Here are some MATLAB codes about the fast multipole method (FMM).
 
 ## uniformFMM
 
-## FMM
+## aFMM
 
-## chebyFMM
-
-Jingyu Liu, November 11, 2022.
+Jingyu Liu, November 14, 2022.
