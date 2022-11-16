@@ -1,12 +1,15 @@
-classdef uniformFMM_Tree < handle
-    % uniformFMM_Tree Uniform FMM tree. We assume that the source and target points are all in the 
-    % square [0, 1]^2.
+classdef aFMM_Tree < handle
+    % aFMM_Tree Adaptive FMM tree. We assume that the source and target points are all in the square
+    % [0, 1]^2.
     
     % Reference:
-    % L. Greengard and V. Rokhlin. A fast algorithm for particle simulations. Journal of 
-    % computational physics, 135(2):280–292, 1997.
+    % J. Carrier, L. Greengard, and V. Rokhlin. A fast adaptive multipole algorithm for particle 
+    % simulations. SIAM journal on scientific and statistical computing, 9(4):669–686, 1988.
     
     % TODO: Make S2M, M2M, M2L, L2L vectorization operations.
+    
+    % TODO: SetList can be optimized: Maybe just need a preorder traversal, but we may need to store
+    % some information when BuildTree.
     
     % Jingyu Liu, November 16, 2022.
     
@@ -19,7 +22,10 @@ classdef uniformFMM_Tree < handle
         parent_;
         children_;
         neighbor_list_ = {};  % Adjacent boxes in the same level.
-        interaction_list_ = {};  % Children of the neighbors of the box's parent which are well-separated from the box.
+        U_list_ = {};  % The box itself and leaf boxes that are adjacent to the box when the box is a leaf, otherwise empty.
+        V_list_ = {};  % Children of the neighbors of the box's parent which are well-separated from the box.
+        W_list_ = {};  % Descendants of the box's neighbors whose parents are adjacent to the box but who are not adjacent to the box when the box is a leaf, otherwise empty. 
+        X_list_ = {};  % Boxes whose W-list containes the box. 
         % Box and point information.
         center_ = zeros(1, 2);
         half_length_ = 0;
@@ -37,13 +43,16 @@ classdef uniformFMM_Tree < handle
     
     methods
         % Initialization.
-        function obj = uniformFMM_Tree(source_points, source_charges, source_order, ...
+        function obj = aFMM_Tree(source_points, source_charges, ...
+                min_points, ...
+                source_order, ...
                 level, order, ...
                 center, half_length)
-            % uniformFMM_TREE Constructor.
+            % aFMM_TREE Constructor.
             arguments
                 source_points(:, 2);
                 source_charges(:, 1);
+                min_points(1, 1) = 64;
                 source_order(:, 1) = 1 : length(source_charges);
                 level(1, 1) = 0;
                 order(1, 1) = 0;
@@ -59,18 +68,17 @@ classdef uniformFMM_Tree < handle
             obj.center_ = center;
             obj.half_length_ = half_length;
             if obj.level_ == 0
-                min_points = 512;  % The number of particles in each leaf box is nearly min_points when uniform case. 
-                num_level = ceil(log2(length(obj.source_charges_) / min_points) / 2);
-                BuildTree(obj, num_level);
+                BuildTree(obj, min_points);
                 SetList(obj);
             end
             
         end
         
-        function BuildTree(obj, num_level)
+        function BuildTree(obj, min_points)
             % BuilTree Build an FMM tree.
             
-            if obj.level_ == num_level
+            n = length(obj.source_charges_);
+            if n <= min_points
                 obj.num_level_ = obj.level_;
                 obj.leaf_ = 1;
                 return;
@@ -86,7 +94,7 @@ classdef uniformFMM_Tree < handle
             for iter = 1 : 4
                 center = obj.center_ + dxdy(iter, :);
                 
-                source_index = 1 : length(obj.source_charges_);
+                source_index = 1 : n;
                 source_index = intersect(source_index, ...
                     find(obj.source_points_(:, 1) >= center(1, 1) - half_length));
                 source_index = intersect(source_index, ...
@@ -100,7 +108,9 @@ classdef uniformFMM_Tree < handle
                 source_order = obj.source_order_(source_index);
                 total_source_number = total_source_number + length(source_index);
                 
-                obj.children_{iter} = uniformFMM_Tree(source_points, source_charges, source_order, ...
+                obj.children_{iter} = aFMM_Tree(source_points, source_charges, ...
+                    min_points, ...
+                    source_order, ...
                     obj.level_ + 1, 4 * obj.order_ + iter - 1, ...
                     center, half_length);
                 obj.children_{iter}.parent_ = obj;
@@ -112,7 +122,7 @@ classdef uniformFMM_Tree < handle
             
             % Recursively buildtree.
             for iter = 1 : 4
-                BuildTree(obj.children_{iter}, num_level);
+                BuildTree(obj.children_{iter}, min_points);
             end
             
             obj.num_level_ = max(...
@@ -127,15 +137,33 @@ classdef uniformFMM_Tree < handle
             % SetList Set the FMM lists.
             
             if obj.leaf_ == 1
-                % We stand on the parent box.
+                % Update U-list.
+                parent = obj.parent_;
+                for iter = 1 : 4
+                    UpdateUList(obj, parent.children_{iter});
+                end
+                for i = 1 : length(parent.neighbor_list_)
+                    UpdateUList(obj, parent.neighbor_list_{i});
+                end
+                
+                % Update W-list and X-list.
+                for i = 1 : length(obj.neighbor_list_)
+                    nb_box = obj.neighbor_list_{i};
+                    if nb_box.leaf_ == 0
+                        for t = 1 : 4
+                            UpdateWXList(obj, nb_box.children_{t});
+                        end
+                    end
+                end
+                
                 return;
             end
             
-            % Update neighbor list and interaction list.
+            % Update neighbor list and V-list.
             for iter = 1 : 4
                 child = obj.children_{iter};
                 for it = 1 : iter - 1
-                   child.neighbor_list_{end + 1} = obj.children_{it};
+                    child.neighbor_list_{end + 1} = obj.children_{it};
                 end
                 for it = iter + 1 : 4
                     child.neighbor_list_{end + 1} = obj.children_{it};
@@ -150,7 +178,7 @@ classdef uniformFMM_Tree < handle
                                 % obj.half_length_ = child.half_length_ + nb_box_child.half_length_.
                                 child.neighbor_list_{end + 1} = nb_box_child;
                             else
-                                child.interaction_list_{end + 1} = nb_box_child;
+                                child.V_list_{end + 1} = nb_box_child;
                             end
                         end
                     end
@@ -160,6 +188,53 @@ classdef uniformFMM_Tree < handle
             % Recursively.
             for iter = 1 : 4
                 SetList(obj.children_{iter});
+            end
+            
+        end
+        
+        function UpdateUList(obj, box)
+            % UpdateUList Update U-list of obj.
+                       
+            if box.leaf_ == 1
+                if obj.level_ > box.level_ || ...
+                        (obj.level_ == box.level_ && obj.order_ >= box.order_)
+                    % Naively, one may directly set the boxes in U-list, but there is a problem: The
+                    % smaller box can't find the larger box in its U-list. Therefore, we use the
+                    % following property: If B is in the U-list of A, then A is also in the U-list 
+                    % of B.
+                    return;
+                end
+                if max(abs(box.center_ - obj.center_)) <= obj.half_length_ + box.half_length_
+                    obj.U_list_{end + 1} = box;
+                    box.U_list_{end + 1} = obj;
+                end
+            elseif max(abs(box.center_ - obj.center_)) <= obj.half_length_ + box.half_length_
+                % If a leaf box is adjacent to obj, its parent must be adjacent to obj.
+                for iter = 1 : 4
+                    UpdateUList(obj, box.children_{iter});
+                end
+            end
+            
+        end
+        
+        function UpdateWXList(obj, box)
+            % UpdateWXList Update W-list and X-list of obj.
+            
+            box_parent = box.parent_;  % It must be nonempty!
+            if max(abs(box.center_ - obj.center_)) > obj.half_length_ + box.half_length_
+                % box's children can't be in the W-list of obj.
+                if max(abs(box_parent.center_ - obj.center_)) <= obj.half_length_ + box_parent.half_length_
+                    % box_parent is adjacent to obj and box is not adjacent to obj.
+                    obj.W_list_{end + 1} = box;
+                    box.X_list_{end + 1} = obj;
+                    return;
+                end
+            else
+                if box.leaf_ == 0
+                    for iter = 1 : 4
+                        UpdateWXList(obj, box.children_{iter});
+                    end
+                end
             end
             
         end
@@ -194,8 +269,10 @@ classdef uniformFMM_Tree < handle
             if obj.level_ == whatlevel
                 S2M2M(obj, p);
             else
-                for iter = 1 : 4
-                    RecursiveS2M2M(obj.children_{iter}, p, whatlevel);
+                if obj.leaf_ == 0
+                    for iter = 1 : 4
+                        RecursiveS2M2M(obj.children_{iter}, p, whatlevel);
+                    end
                 end
             end
             
@@ -260,8 +337,10 @@ classdef uniformFMM_Tree < handle
             if obj.level_ == whatlevel
                 M2L2L(obj, p);
             else
-                for iter = 1 : 4
-                    RecursiveM2L2L(obj.children_{iter}, p, whatlevel);
+                if obj.leaf_ == 0
+                    for iter = 1 : 4
+                        RecursiveM2L2L(obj.children_{iter}, p, whatlevel);
+                    end
                 end
             end
         end
@@ -282,27 +361,41 @@ classdef uniformFMM_Tree < handle
             
             obj.local_expansion_ = zeros(1, p + 1);
             zc = complex(obj.center_(1, 1), obj.center_(1, 2));
-            % M2L from interaction-list.
-            for i = 1 : length(obj.interaction_list_)
-                interact_box = obj.interaction_list_{i};
-                z0 = complex(interact_box.center_(1, 1), interact_box.center_(1, 2));
+            % M2L from V-list.
+            for i = 1 : length(obj.V_list_)
+                V_box = obj.V_list_{i};
+                z0 = complex(V_box.center_(1, 1), V_box.center_(1, 2));
                 obj.local_expansion_(1) = obj.local_expansion_(1) + ...
-                    interact_box.multipole_expansion_(1) * log(-(z0 - zc));
+                    V_box.multipole_expansion_(1) * log(-(z0 - zc));
                 for l = 1 : p
                     obj.local_expansion_(l + 1) = obj.local_expansion_(l + 1) + ...
-                        (-interact_box.multipole_expansion_(1) / l / (z0 - zc)^l);
+                        (-V_box.multipole_expansion_(1) / l / (z0 - zc)^l);
                 end
                 for k = 1 : p
                     obj.local_expansion_(1) = obj.local_expansion_(1) + ...
-                        interact_box.multipole_expansion_(k + 1) / (z0 - zc)^k * (-1)^k;
+                        V_box.multipole_expansion_(k + 1) / (z0 - zc)^k * (-1)^k;
                     for l = 1 : p
                         obj.local_expansion_(l + 1) = obj.local_expansion_(l + 1) + ...
-                            interact_box.multipole_expansion_(k + 1) / (z0 - zc)^k * nchoosek(l + k - 1, k - 1) * (-1)^k / (z0 - zc)^l;
+                            V_box.multipole_expansion_(k + 1) / (z0 - zc)^k * nchoosek(l + k - 1, k - 1) * (-1)^k / (z0 - zc)^l;
+                    end
+                end
+            end
+            % M2L from X-list.
+            for i = 1 : length(obj.X_list_)
+                X_box = obj.X_list_{i};
+                m = length(X_box.source_charges_);
+                z0 = complex(X_box.source_points_(:, 1), X_box.source_points_(:, 2));
+                for t = 1 : m
+                    obj.local_expansion_(1) = obj.local_expansion_(1) + ...
+                        X_box.source_charges_(t) * log(-(z0(t) - zc));
+                    for l = 1 : p
+                        obj.local_expansion_(l + 1) = obj.local_expansion_(l + 1) + ...
+                            (-X_box.source_charges_(t) / l / (z0(t) - zc)^l);
                     end
                 end
             end
             % Combine together.
-            obj.local_expansion_ = obj.parent_local_expansion_ + obj.local_expansion_;
+            obj.local_expansion_ = obj.local_expansion_ + obj.parent_local_expansion_;
             
         end
         
@@ -394,7 +487,7 @@ classdef uniformFMM_Tree < handle
             z0 = complex(obj.center_(1, 1), obj.center_(1, 2));
             potential(obj.target_order_) = potential(obj.target_order_) + ...
                 polyval(flip(obj.local_expansion_), z - z0);
-            % Near-field: The box itself and its neighbors.
+            % Near-field: The box itself and its U-list.
             zz = complex(obj.source_points_(:, 1), obj.source_points_(:, 2));
             potential(obj.target_order_) = potential(obj.target_order_) + ...
                 sum(obj.source_charges_' .* log(kron(z, ones(size(zz.'))) - kron(ones(size(z)), zz.')), 2);
@@ -403,16 +496,24 @@ classdef uniformFMM_Tree < handle
 %                 potential(obj.target_order_) = potential(obj.target_order_) + ...
 %                     obj.source_charges_(k) * log(z - zz);
 %             end
-            for i = 1 : length(obj.neighbor_list_)
-                nb_box = obj.neighbor_list_{i};
-                zz = complex(nb_box.source_points_(:, 1), nb_box.source_points_(:, 2));
+            for i = 1 : length(obj.U_list_)
+                U_box = obj.U_list_{i};
+                zz = complex(U_box.source_points_(:, 1), U_box.source_points_(:, 2));
                 potential(obj.target_order_) = potential(obj.target_order_) + ...
-                sum(nb_box.source_charges_' .* log(kron(z, ones(size(zz.'))) - kron(ones(size(z)), zz.')), 2);
-%                 for k = 1 : length(nb_box.source_charges_)
-%                     zz = complex(nb_box.source_points_(k, 1), nb_box.source_points_(k, 2));
+                    sum(U_box.source_charges_' .* log(kron(z, ones(size(zz.'))) - kron(ones(size(z)), zz.')), 2);
+%                 for k = 1 : length(U_box.source_charges_)
+%                     zz = complex(U_box.source_points_(k, 1), U_box.source_points_(k, 2));
 %                     potential(obj.target_order_) = potential(obj.target_order_) + ...
-%                         nb_box.source_charges_(k) * log(z - zz);
+%                         U_box.source_charges_(k) * log(z - zz);
 %                 end
+            end
+            % Medium-field: W-list.
+            for i = 1 : length(obj.W_list_)
+                W_box = obj.W_list_{i};
+                z0 = complex(W_box.center_(1, 1), W_box.center_(1, 2));
+                potential(obj.target_order_) = potential(obj.target_order_) + ...
+                    W_box.multipole_expansion_(1) * log(z - z0) + ...
+                    polyval([flip(W_box.multipole_expansion_(2 : end)), 0], 1 ./ (z - z0));
             end
             
         end
