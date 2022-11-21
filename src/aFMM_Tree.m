@@ -6,12 +6,7 @@ classdef aFMM_Tree < handle
     % J. Carrier, L. Greengard, and V. Rokhlin. A fast adaptive multipole algorithm for particle 
     % simulations. SIAM journal on scientific and statistical computing, 9(4):669–686, 1988.
     
-    % TODO: Make S2M, M2M, M2L, L2L vectorization operations.
-    
-    % TODO: SetList can be optimized: Maybe just need a preorder traversal, but we may need to store
-    % some information when BuildTree.
-    
-    % Jingyu Liu, November 16, 2022.
+    % Jingyu Liu, November 17, 2022.
     
     properties
         % Tree information.
@@ -139,6 +134,9 @@ classdef aFMM_Tree < handle
             if obj.leaf_ == 1
                 % Update U-list.
                 parent = obj.parent_;
+                if isempty(parent)
+                    return;
+                end
                 for iter = 1 : 4
                     UpdateUList(obj, parent.children_{iter});
                 end
@@ -244,6 +242,28 @@ classdef aFMM_Tree < handle
             % FMM_Alg FMM algorithms.
             p = ceil(-log2(tol));  % Number of expansion terms.
             
+            global M2M_combination;
+            M2M_combination = zeros(p, p);  % (l - 1, k - 1) for 1 <= k <= l <= p. 
+            for l = 1 : p
+                for k = 1 : l
+                    M2M_combination(l, k) = nchoosek(l - 1, k - 1);
+                end
+            end
+            global M2L_combination;
+            M2L_combination = zeros(p, p);  % (l + k - 1, k - 1) for 1 <= k, l <= p.
+            for l = 1 : p
+                for k = 1 : p
+                    M2L_combination(l, k) = nchoosek(l + k - 1, k - 1);
+                end
+            end
+            global L2L_combination;
+            L2L_combination = zeros(p + 1, p + 1);  % (k, l) for 0 <= l <= k <= p.
+            for l = 0 : p
+                for k = l : p
+                    L2L_combination(k + 1, l + 1) = nchoosek(k, l);
+                end
+            end
+            
             % S2M and M2M.
             for tmplevel = obj.num_level_ : -1 : 0
                 RecursiveS2M2M(obj, p, tmplevel);
@@ -301,17 +321,26 @@ classdef aFMM_Tree < handle
             zc = complex(obj.center_(1, 1), obj.center_(1, 2));
             obj.multipole_expansion_ = zeros(1, p + 1);
             obj.multipole_expansion_(1) = sum(obj.source_charges_);
+%             for k = 1 : p
+%                 for i = 1 : m
+%                     obj.multipole_expansion_(k + 1) = obj.multipole_expansion_(k + 1) + ...
+%                         (-obj.source_charges_(i) * (z(i) - zc)^k);
+%                 end
+%                 obj.multipole_expansion_(k + 1) = obj.multipole_expansion_(k + 1) / k;
+%             end
+            z_minus_zc = z - zc;
+            zexp = z_minus_zc;
             for k = 1 : p
-                for i = 1 : m
-                    obj.multipole_expansion_(k + 1) = obj.multipole_expansion_(k + 1) + (-obj.source_charges_(i) * (z(i) - zc)^k);
-                end
-                obj.multipole_expansion_(k + 1) = obj.multipole_expansion_(k + 1) / k;
+                obj.multipole_expansion_(k + 1) = -zexp.' * obj.source_charges_ / k;
+                zexp = zexp .* z_minus_zc;
             end
             
         end
         
         function M2M(obj, p)
             % M2M Multipole to multipole.
+            
+            global M2M_combination;
             
             obj.multipole_expansion_ = zeros(1, p + 1);
             zc = complex(obj.center_(1, 1), obj.center_(1, 2));
@@ -322,7 +351,7 @@ classdef aFMM_Tree < handle
                 for l = 1 : p
                     for k = 1 : l
                         obj.multipole_expansion_(l + 1) = obj.multipole_expansion_(l + 1) + ...
-                            child.multipole_expansion_(k + 1) * (z0 - zc)^(l - k) * nchoosek(l - 1, k - 1);
+                            child.multipole_expansion_(k + 1) * (z0 - zc)^(l - k) * M2M_combination(l, k);
                     end
                     obj.multipole_expansion_(l + 1) = obj.multipole_expansion_(l + 1) - ...
                         child.multipole_expansion_(1) * (z0 - zc)^l / l;
@@ -359,6 +388,8 @@ classdef aFMM_Tree < handle
         function M2L(obj, p)
             % M2L Multipole to local.
             
+            global M2L_combination;
+            
             obj.local_expansion_ = zeros(1, p + 1);
             zc = complex(obj.center_(1, 1), obj.center_(1, 2));
             % M2L from V-list.
@@ -376,7 +407,7 @@ classdef aFMM_Tree < handle
                         V_box.multipole_expansion_(k + 1) / (z0 - zc)^k * (-1)^k;
                     for l = 1 : p
                         obj.local_expansion_(l + 1) = obj.local_expansion_(l + 1) + ...
-                            V_box.multipole_expansion_(k + 1) / (z0 - zc)^k * nchoosek(l + k - 1, k - 1) * (-1)^k / (z0 - zc)^l;
+                            V_box.multipole_expansion_(k + 1) / (z0 - zc)^k * M2L_combination(l, k) * (-1)^k / (z0 - zc)^l;
                     end
                 end
             end
@@ -402,6 +433,8 @@ classdef aFMM_Tree < handle
         function L2L(obj, p)
             % L2L Local to local.
             
+            global L2L_combination;
+            
             z0 = complex(obj.center_(1, 1), obj.center_(1, 2));
             for iter = 1 : 4
                 child = obj.children_{iter};
@@ -410,7 +443,7 @@ classdef aFMM_Tree < handle
                 for l = 0 : p
                     for k = l : p
                         child.parent_local_expansion_(l + 1) = child.parent_local_expansion_(l + 1) + ...
-                            obj.local_expansion_(k + 1) * nchoosek(k, l) * (-(z0 - zc))^(k - l);
+                            obj.local_expansion_(k + 1) * L2L_combination(k + 1, l + 1) * (-(z0 - zc))^(k - l);
                     end
                 end
             end
@@ -489,23 +522,23 @@ classdef aFMM_Tree < handle
                 polyval(flip(obj.local_expansion_), z - z0);
             % Near-field: The box itself and its U-list.
             zz = complex(obj.source_points_(:, 1), obj.source_points_(:, 2));
-            potential(obj.target_order_) = potential(obj.target_order_) + ...
-                sum(obj.source_charges_' .* log(kron(z, ones(size(zz.'))) - kron(ones(size(z)), zz.')), 2);
 %             for k = 1 : length(obj.source_charges_)
 %                 zz = complex(obj.source_points_(k, 1), obj.source_points_(k, 2));
 %                 potential(obj.target_order_) = potential(obj.target_order_) + ...
 %                     obj.source_charges_(k) * log(z - zz);
 %             end
+            potential(obj.target_order_) = potential(obj.target_order_) + ...
+                sum(obj.source_charges_' .* log(kron(z, ones(size(zz.'))) - kron(ones(size(z)), zz.')), 2);
             for i = 1 : length(obj.U_list_)
                 U_box = obj.U_list_{i};
                 zz = complex(U_box.source_points_(:, 1), U_box.source_points_(:, 2));
-                potential(obj.target_order_) = potential(obj.target_order_) + ...
-                    sum(U_box.source_charges_' .* log(kron(z, ones(size(zz.'))) - kron(ones(size(z)), zz.')), 2);
 %                 for k = 1 : length(U_box.source_charges_)
 %                     zz = complex(U_box.source_points_(k, 1), U_box.source_points_(k, 2));
 %                     potential(obj.target_order_) = potential(obj.target_order_) + ...
 %                         U_box.source_charges_(k) * log(z - zz);
 %                 end
+                potential(obj.target_order_) = potential(obj.target_order_) + ...
+                    sum(U_box.source_charges_' .* log(kron(z, ones(size(zz.'))) - kron(ones(size(z)), zz.')), 2);
             end
             % Medium-field: W-list.
             for i = 1 : length(obj.W_list_)

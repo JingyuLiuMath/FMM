@@ -1,6 +1,6 @@
 %% Basic settings.
-n = 20000;
-m = 20000;
+n = 10000;
+m = 10000;
 
 min_points = 512;
 tol = 1e-6;
@@ -9,7 +9,7 @@ source_points = GeneratePoints(n, 2);
 source_charges = rand(n, 1);
 target_points = rand(m, 2);
 
-uniformFMM_flag = 0;  % Whether need to be compared with uniform FMM. 
+uniformFMM_flag = 1;  % Whether need to be compared with uniform FMM. 
 
 %% Compute directly.
 tic

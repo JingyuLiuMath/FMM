@@ -3,9 +3,9 @@ n = 10000;
 m = 10000;
 
 tol = 1e-6;
-source_points = GeneratePoints(n, 0);
+source_points = GeneratePoints(n, 1);
 source_charges = rand(n, 1);
-target_points = rand(m , 2);
+target_points = rand(m, 2);
 
 %% Compute directly.
 tic
