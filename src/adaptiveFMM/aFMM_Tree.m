@@ -8,6 +8,8 @@ classdef aFMM_Tree < handle
     
     % Jingyu Liu, November 17, 2022.
     
+    % TODO: Find why aFMM is slow than uniformFMM and fix it.
+    
     properties
         % Tree information.
         level_ = 0;
@@ -273,7 +275,7 @@ classdef aFMM_Tree < handle
             % Set parent local expansion zero for boxes in level 1.
             if obj.leaf_ == 0
                 for iter = 1 : 4
-                    obj.children_{iter}.parent_local_expansion_ = zeros(1, p + 1);
+                    obj.children_{iter}.parent_local_expansion_ = zeros(p + 1, 1);
                 end
             end
             
@@ -315,12 +317,12 @@ classdef aFMM_Tree < handle
             
             m = length(obj.source_charges_);
             if m == 0
-                obj.multipole_expansion_ = zeros(1, p + 1);
+                obj.multipole_expansion_ = zeros(p + 1, 1);
                 return;
             end
             z = complex(obj.source_points_(:, 1), obj.source_points_(:, 2));
             zc = complex(obj.center_(1, 1), obj.center_(1, 2));
-            obj.multipole_expansion_ = zeros(1, p + 1);
+            obj.multipole_expansion_ = zeros(p + 1, 1);
             obj.multipole_expansion_(1) = sum(obj.source_charges_);
 %             for k = 1 : p
 %                 for i = 1 : m
@@ -343,7 +345,7 @@ classdef aFMM_Tree < handle
             
             global M2M_combination;
             
-            obj.multipole_expansion_ = zeros(1, p + 1);
+            obj.multipole_expansion_ = zeros(p + 1, 1);
             zc = complex(obj.center_(1, 1), obj.center_(1, 2));
             for iter = 1 : 4
                 child = obj.children_{iter};
@@ -391,7 +393,7 @@ classdef aFMM_Tree < handle
             
             global M2L_combination;
             
-            obj.local_expansion_ = zeros(1, p + 1);
+            obj.local_expansion_ = zeros(p + 1, 1);
             zc = complex(obj.center_(1, 1), obj.center_(1, 2));
             % M2L from V-list.
             for i = 1 : length(obj.V_list_)
@@ -439,7 +441,7 @@ classdef aFMM_Tree < handle
             z0 = complex(obj.center_(1, 1), obj.center_(1, 2));
             for iter = 1 : 4
                 child = obj.children_{iter};
-                child.parent_local_expansion_ = zeros(1, p + 1);
+                child.parent_local_expansion_ = zeros(p + 1, 1);
                 zc = complex(child.center_(1, 1), child.center_(1, 2));
                 for l = 0 : p
                     for k = l : p
@@ -548,7 +550,7 @@ classdef aFMM_Tree < handle
                 z0 = complex(W_box.center_(1, 1), W_box.center_(1, 2));
                 potential(obj.target_order_) = potential(obj.target_order_) + ...
                     W_box.multipole_expansion_(1) * log(z - z0) + ...
-                    polyval([flip(W_box.multipole_expansion_(2 : end)), 0], 1 ./ (z - z0));
+                    polyval([flip(W_box.multipole_expansion_(2 : end)); 0], 1 ./ (z - z0));
             end
             
         end

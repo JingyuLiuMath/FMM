@@ -2,8 +2,14 @@
 
 MATLAB codes about the fast multipole method (FMM).
 
-## uniformFMM
+## Classical FMM
 
-## aFMM
+### uniform FMM
 
-Jingyu Liu, November 16, 2022.
+### adaptive FMM
+
+## Chebyshev FMM
+
+### 1D uniformChebyshev FMM
+
+Jingyu Liu, November 24, 2022.

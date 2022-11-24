@@ -4,7 +4,6 @@ m = 10000;
 
 min_points = 512;
 tol = 1e-6;
-
 source_points = GeneratePoints(n, 2);
 source_charges = rand(n, 1);
 target_points = rand(m, 2);
