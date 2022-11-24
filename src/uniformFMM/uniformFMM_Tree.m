@@ -49,6 +49,7 @@ classdef uniformFMM_Tree < handle
                 center(1, 2) = [0.5, 0.5];
                 half_length(1, 1) = 0.5;
             end
+            
             obj.source_points_ = source_points;
             obj.source_charges_ = source_charges;
             obj.source_order_ = source_order;
@@ -104,7 +105,7 @@ classdef uniformFMM_Tree < handle
                 obj.children_{iter}.parent_ = obj;
             end
             
-            if total_source_number ~= size(obj.source_points_, 1)
+            if total_source_number ~= length(obj.source_charges_)
                 error("Source points appear on the boundary!")
             end
             
@@ -333,7 +334,7 @@ classdef uniformFMM_Tree < handle
                 end
             end
             % Combine together.
-            obj.local_expansion_ = obj.parent_local_expansion_ + obj.local_expansion_;
+            obj.local_expansion_ = obj.local_expansion_ + obj.parent_local_expansion_;
             
         end
         
@@ -387,6 +388,7 @@ classdef uniformFMM_Tree < handle
                 child = obj.children_{iter};
                 center = child.center_;
                 half_length = child.half_length_;
+                
                 target_index = 1 : m;
                 target_index = intersect(target_index, ...
                     find(obj.target_points_(:, 1) >= center(1, 1) - half_length));
@@ -404,7 +406,7 @@ classdef uniformFMM_Tree < handle
                 child.target_order_ = target_order;
             end
             
-            if total_target_number ~= size(obj.target_points_, 1)
+            if total_target_number ~= m
                 error("Target points appear on the boundary!")
             end
             

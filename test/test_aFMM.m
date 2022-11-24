@@ -21,7 +21,7 @@ if uniformFMM_flag == 1
     tic;
     uniformFMM = uniformFMM_Tree(source_points, source_charges);
     uniformFMM.FMM_Alg(tol);
-    potential_uniformFMM = FMM_Compute(uniformFMM, target_points);
+    potential_uniformFMM = uniformFMM.FMM_Compute(target_points);
     time_uniformFMM = toc;
 end
 
@@ -29,7 +29,7 @@ end
 tic;
 aFMM = aFMM_Tree(source_points, source_charges, min_points);
 aFMM.FMM_Alg(tol);
-potential_aFMM = FMM_Compute(aFMM, target_points);
+potential_aFMM = aFMM.FMM_Compute(target_points);
 time_aFMM = toc;
 
 %% Show results.

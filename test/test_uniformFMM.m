@@ -16,7 +16,7 @@ time_direct = toc;
 tic;
 uniformFMM = uniformFMM_Tree(source_points, source_charges);
 uniformFMM.FMM_Alg(tol);
-potential_uniformFMM = FMM_Compute(uniformFMM, target_points);
+potential_uniformFMM = uniformFMM.FMM_Compute(target_points);
 time_uniformFMM = toc;
 
 %% Show results.
