@@ -24,5 +24,6 @@ disp("Number of source points: " + size(source_points, 1));
 disp("Number of target points: " + size(target_points, 1));
 disp("Tolerance: " + tol);
 disp("Error of uniformFMM: " + max(abs(potential_direct - potential_uniformFMM)));
+disp("Relative error of uniformFMM: " + max(abs(potential_direct - potential_uniformFMM) ./ abs(potential_direct)));
 disp("Direct time: " + time_direct);
 disp("uniformFMM time: " + time_uniformFMM);

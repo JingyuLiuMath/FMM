@@ -1,6 +1,6 @@
 %% Basic settings.
-n = 10000;
-m = 10000;
+n = 20000;
+m = 20000;
 
 min_points = 512;
 tol = 1e-6;
@@ -38,8 +38,10 @@ disp("Minimum points: " + min_points)
 disp("Tolerance: " + tol);
 if uniformFMM_flag == 1
     disp("Error of uniformFMM: " + max(abs(potential_direct - potential_uniformFMM)));
+    disp("Relative error of uniformFMM: " + max(abs(potential_direct - potential_uniformFMM) ./ abs(potential_direct)));
 end
 disp("Error of aFMM: " + max(abs(potential_direct - potential_aFMM)));
+disp("Relative error of aFMM: " + max(abs(potential_direct - potential_aFMM) ./ abs(potential_direct)));
 disp("Direct time: " + time_direct);
 if uniformFMM_flag == 1
     disp("uniformFMM time: " + time_uniformFMM);

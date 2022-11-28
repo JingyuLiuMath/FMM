@@ -166,6 +166,7 @@ classdef uniformFMM_Tree < handle
         % FMM algorithm.
         function FMM_Alg(obj, tol)
             % FMM_Alg FMM algorithms.
+            
             p = ceil(-log2(tol));  % Number of expansion terms.
             
             global M2M_combination;

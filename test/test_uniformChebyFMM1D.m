@@ -1,6 +1,6 @@
 %% Basic settings.
-n = 20000;
-m = 20000;
+n = 10000;
+m = 10000;
 
 tol = 1e-6;
 source_points = rand(n, 1);
@@ -26,5 +26,6 @@ disp("Number of source points: " + size(source_points, 1));
 disp("Number of target points: " + size(target_points, 1));
 disp("Tolerance: " + tol);
 disp("Error of uniformChebyFMM: " + max(abs(potential_direct - potential_uniformChebyFMM)));
+disp("Relative error of uniformChebyFMM: " + max(abs(potential_direct - potential_uniformChebyFMM) ./ abs(potential_direct)));
 disp("Direct time: " + time_direct);
 disp("uniformChebyFMM time: " + time_uniformChebyFMM);

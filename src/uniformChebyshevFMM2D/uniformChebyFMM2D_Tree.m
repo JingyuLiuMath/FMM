@@ -1,12 +1,12 @@
-classdef uniformChebyFMM1D_Tree < handle
-    % uniformChebyFMM1D_Tree. 1D Uniform Chebyshev FMM tree. We assume that the source and target 
-    % points are all in the interval [0, 1].
+classdef uniformChebyFMM2D_Tree < handle
+    % uniformChebyFMM2D_Tree. 2D Uniform Chebyshev FMM tree. We assume that the source and target 
+    % points are all in the square [0, 1]^2.
     
     % Reference:
     % W. Fong and E. Darve. The black-box fast multipole method. Journal of computational physics, 
     % 228(23):8712–8725, 2009.
     
-    % Jingyu Liu, November 24, 2022.
+    % Jingyu Liu, November 27, 2022.
     
     properties
         % Tree information.
@@ -19,7 +19,7 @@ classdef uniformChebyFMM1D_Tree < handle
         neighbor_list_ = {};  % Adjacent boxes in the same level.
         interaction_list_ = {};  % Children of the neighbors of the box's parent which are well-separated from the box.
         % Box and point information.
-        center_ = 0;
+        center_ = zeros(1, 2);
         half_length_ = 0;
         source_points_ = [];
         source_charges_ = [];
@@ -36,18 +36,18 @@ classdef uniformChebyFMM1D_Tree < handle
     
     methods
         % Initialization.
-        function obj = uniformChebyFMM1D_Tree(source_points, source_charges, source_order, ...
+        function obj = uniformChebyFMM2D_Tree(source_points, source_charges, source_order, ...
                 level, order, ...
                 center, half_length)
-            % uniformChebyFMM1D_Tree Constructor.
+            % uniformChebyFMM2D_Tree Constructor.
             arguments
-                source_points(:, 1);
+                source_points(:, 2);
                 source_charges(:, 1);
                 source_order(:, 1) = 1 : length(source_charges);
                 level(1, 1) = 0;
                 order(1, 1) = 0;
                 % The box must be square.
-                center(1, 1) = 0.5;
+                center(1, 2) = [0.5, 0.5];
                 half_length(1, 1) = 0.5;
             end
             
@@ -76,26 +76,33 @@ classdef uniformChebyFMM1D_Tree < handle
                 return;
             end
             
-            % Partition the box into 2 sub-boxes.
+            % Partition the box into 4 sub-boxes.
             half_length = obj.half_length_ / 2;
-            dx = [-half_length; half_length];
+            dxdy = [-half_length, half_length;
+                half_length, half_length;
+                -half_length, -half_length;
+                half_length, -half_length];
             total_source_number = 0;
             
-            for iter = 1 : 2
-                center = obj.center_ + dx(iter);
+            for iter = 1 : 4
+                center = obj.center_ + dxdy(iter, :);
                 
                 source_index = 1 : length(obj.source_charges_);
                 source_index = intersect(source_index, ...
-                    find(obj.source_points_ >= center - half_length));
+                    find(obj.source_points_(:, 1) >= center(1, 1) - half_length));
                 source_index = intersect(source_index, ...
-                    find(obj.source_points_ < center + half_length));
-                source_points = obj.source_points_(source_index);
+                    find(obj.source_points_(:, 1) < center(1, 1) + half_length));
+                source_index = intersect(source_index, ...
+                    find(obj.source_points_(:, 2) >= center(1, 2) - half_length));
+                source_index = intersect(source_index, ...
+                    find(obj.source_points_(:, 2) < center(1, 2) + half_length));
+                source_points = obj.source_points_(source_index, :);
                 source_charges = obj.source_charges_(source_index);
                 source_order = obj.source_order_(source_index);
                 total_source_number = total_source_number + length(source_index);
                 
-                obj.children_{iter} = uniformChebyFMM1D_Tree(source_points, source_charges, source_order, ...
-                    obj.level_ + 1, 2 * obj.order_ + iter - 1, ...
+                obj.children_{iter} = uniformChebyFMM2D_Tree(source_points, source_charges, source_order, ...
+                    obj.level_ + 1, 4 * obj.order_ + iter - 1, ...
                     center, half_length);
                 obj.children_{iter}.parent_ = obj;
             end
@@ -105,11 +112,15 @@ classdef uniformChebyFMM1D_Tree < handle
             end
             
             % Recursively buildtree.
-            for iter = 1 : 2
+            for iter = 1 : 4
                 BuildTree(obj.children_{iter}, num_level);
             end
             
-            obj.num_level_ = max(obj.children_{1}.num_level_, obj.children_{2}.num_level_);
+            obj.num_level_ = max(...
+                [obj.children_{1}.num_level_, ...
+                obj.children_{2}.num_level_, ...
+                obj.children_{3}.num_level_, ...
+                obj.children_{4}.num_level_]);
             
         end
         
@@ -122,16 +133,21 @@ classdef uniformChebyFMM1D_Tree < handle
             end
             
             % Update neighbor list and interaction list.
-            for iter = 1 : 2
+            for iter = 1 : 4
                 child = obj.children_{iter};
-                child.neighbor_list_{end + 1} = obj.children_{3 - iter};
+                for it = 1 : iter - 1
+                   child.neighbor_list_{end + 1} = obj.children_{it};
+                end
+                for it = iter + 1 : 4
+                    child.neighbor_list_{end + 1} = obj.children_{it};
+                end
                 for i = 1 : length(obj.neighbor_list_)
                     nb_box = obj.neighbor_list_{i};
                     if nb_box.leaf_ == 0
-                        for nb_iter = 1 : 2
+                        for nb_iter = 1 : 4
                             nb_box_child = nb_box.children_{nb_iter};
                             % nb_box_child and child are of the same level.
-                            if abs(nb_box_child.center_ - child.center_) <= obj.half_length_
+                            if max(abs(nb_box_child.center_ - child.center_)) <= obj.half_length_
                                 % obj.half_length_ = child.half_length_ + nb_box_child.half_length_.
                                 child.neighbor_list_{end + 1} = nb_box_child;
                             else
@@ -143,7 +159,7 @@ classdef uniformChebyFMM1D_Tree < handle
             end
             
             % Recursively.
-            for iter = 1 : 2
+            for iter = 1 : 4
                 SetList(obj.children_{iter});
             end
             
@@ -153,7 +169,9 @@ classdef uniformChebyFMM1D_Tree < handle
         function FMM_Alg(obj, kernel_fun, tol)
             % FMM_Alg FMM algorithms.
             
-            p = ceil(-log2(tol));  % Number of Chebyshev points in each interval.
+            global num_expansion_item;
+            p = ceil(-log2(tol) / 2);  % Number of Chebyshev points in each direction.
+            num_expansion_item = p;
             
             global kernel_function;
             kernel_function = kernel_fun;
@@ -165,11 +183,11 @@ classdef uniformChebyFMM1D_Tree < handle
             
             % Set parent local expansion zero for boxes in level 1.
             if obj.leaf_ == 0
-                for iter = 1 : 2
-                    obj.children_{iter}.parent_local_expansion_ = zeros(p, 1);
+                for iter = 1 : 4
+                    obj.children_{iter}.parent_local_expansion_ = zeros(p^2, 1);
                 end
             else
-                obj.local_expansion_ = zeros(p, 1);
+                obj.local_expansion_ = zeros(p^2, 1);
             end
             
             % M2L and L2L.
@@ -185,7 +203,7 @@ classdef uniformChebyFMM1D_Tree < handle
             if obj.level_ == whatlevel
                 S2M2M(obj, p);
             else
-                for iter = 1 : 2
+                for iter = 1 : 4
                     RecursiveS2M2M(obj.children_{iter}, p, whatlevel);
                 end
             end
@@ -208,11 +226,11 @@ classdef uniformChebyFMM1D_Tree < handle
             
             left_point = obj.center_ - obj.half_length_;
             right_point = obj.center_ + obj.half_length_;
-            obj.cheby_points_ = ChebyPoints(left_point, right_point, p);
+            obj.cheby_points_ = ChebyPoints2D(left_point, right_point, p);
             
             m = length(obj.source_charges_);
             if m == 0
-                obj.multipole_expansion_ = zeros(p, 1);
+                obj.multipole_expansion_ = zeros(p^2, 1);
                 return;
             end
             
@@ -225,7 +243,7 @@ classdef uniformChebyFMM1D_Tree < handle
 %                 end
 %             end
             obj.multipole_expansion_ = ...
-                ComputeSp(left_point, right_point, p, obj.cheby_points_, obj.source_points_) * ...
+                ComputeSp2D(left_point, right_point, p, obj.cheby_points_, obj.source_points_) * ...
                 obj.source_charges_;
             
         end
@@ -235,10 +253,10 @@ classdef uniformChebyFMM1D_Tree < handle
             
             left_point = obj.center_ - obj.half_length_;
             right_point = obj.center_ + obj.half_length_;
-            obj.cheby_points_ = ChebyPoints(left_point, right_point, p);
+            obj.cheby_points_ = ChebyPoints2D(left_point, right_point, p);
             
-            obj.multipole_expansion_ = zeros(p, 1);
-            for iter = 1 : 2
+            obj.multipole_expansion_ = zeros(p^2, 1);
+            for iter = 1 : 4
                 child = obj.children_{iter};
 %                 for k = 1 : p
 %                     for l = 1 : p
@@ -248,7 +266,7 @@ classdef uniformChebyFMM1D_Tree < handle
 %                     end
 %                 end
                 obj.multipole_expansion_ = obj.multipole_expansion_ + ...
-                    ComputeSp(left_point, right_point, p, obj.cheby_points_, child.cheby_points_) * ...
+                    ComputeSp2D(left_point, right_point, p, obj.cheby_points_, child.cheby_points_) * ...
                     child.multipole_expansion_;
             end
             
@@ -260,7 +278,7 @@ classdef uniformChebyFMM1D_Tree < handle
             if obj.level_ == whatlevel
                 M2L2L(obj, p);
             else
-                for iter = 1 : 2
+                for iter = 1 : 4
                     RecursiveM2L2L(obj.children_{iter}, p, whatlevel);
                 end
             end
@@ -282,19 +300,19 @@ classdef uniformChebyFMM1D_Tree < handle
             
             global kernel_function;
             
-            obj.local_expansion_ = zeros(p, 1);
+            obj.local_expansion_ = zeros(p^2, 1);
             % M2L from interaction-list.
             for i = 1 : length(obj.interaction_list_)
                 interact_box = obj.interaction_list_{i};
-%                 for k = 1 : p
-%                     for l = 1 : p
+%                 for k = 1 : p^2
+%                     for l = 1 : p^2
 %                         obj.local_expansion_(k) = obj.local_expansion_(k) + ...
 %                             interact_box.multipole_expansion_(l) * ...
-%                             kernel_function(obj.cheby_points_(k), interact_box.cheby_points_(l));
+%                             kernel_function(obj.cheby_points_(k, :), interact_box.cheby_points_(l, :));
 %                     end
 %                 end
             obj.local_expansion_ = obj.local_expansion_ + ...
-                kernel_function(obj.cheby_points_, interact_box.cheby_points_') * ...
+                kernel_function(obj.cheby_points_, interact_box.cheby_points_) * ...
                 interact_box.multipole_expansion_;
                     
             end
@@ -309,9 +327,9 @@ classdef uniformChebyFMM1D_Tree < handle
             left_point = obj.center_ - obj.half_length_;
             right_point = obj.center_ + obj.half_length_;
             
-            for iter = 1 : 2
+            for iter = 1 : 4
                 child = obj.children_{iter};
-                child.parent_local_expansion_ = zeros(p, 1);
+                child.parent_local_expansion_ = zeros(p^2, 1);
 %                 for k = 1 : p
 %                     for l = 1 : p
 %                         child.parent_local_expansion_(k) = child.parent_local_expansion_(k) + ...
@@ -320,7 +338,7 @@ classdef uniformChebyFMM1D_Tree < handle
 %                     end
 %                 end
                 child.parent_local_expansion_ = child.parent_local_expansion_ + ...
-                    ComputeSp(left_point, right_point, p, child.cheby_points_, obj.cheby_points_) * ...
+                    ComputeSp2D(left_point, right_point, p, child.cheby_points_, obj.cheby_points_) * ...
                     obj.local_expansion_;
             end
             
@@ -344,24 +362,28 @@ classdef uniformChebyFMM1D_Tree < handle
             if obj.leaf_ == 1
                 potential = L2T(obj, potential);
                 % Clear.
-                obj.target_points_= [];
-                obj.target_order_ = [];
+%                 obj.target_points_= [];
+%                 obj.target_order_ = [];
                 return;
             end
             
             m = size(obj.target_points_, 1);
             total_target_number = 0;
-            for iter = 1 : 2
+            for iter = 1 : 4
                 child = obj.children_{iter};
                 center = child.center_;
                 half_length = child.half_length_;
                 
                 target_index = 1 : m;
                 target_index = intersect(target_index, ...
-                    find(obj.target_points_ >= center - half_length));
+                    find(obj.target_points_(:, 1) >= center(1, 1) - half_length));
                 target_index = intersect(target_index, ...
-                    find(obj.target_points_ < center + half_length));
-                target_points = obj.target_points_(target_index);
+                    find(obj.target_points_(:, 1) < center(1, 1) + half_length));
+                target_index = intersect(target_index, ...
+                    find(obj.target_points_(:, 2) >= center(1, 2) - half_length));
+                target_index = intersect(target_index, ...
+                    find(obj.target_points_(:, 2) < center(1, 2) + half_length));
+                target_points = obj.target_points_(target_index, :);
                 target_order = obj.target_order_(target_index);
                 total_target_number = total_target_number + length(target_index);
                 
@@ -374,13 +396,13 @@ classdef uniformChebyFMM1D_Tree < handle
             end
             
             % Recursively.
-            for iter = 1 : 2
+            for iter = 1 : 4
                 potential = RecursiveL2T(obj.children_{iter}, potential);
             end
             
             % Clear.
-            obj.target_points_= [];
-            obj.target_order_ = [];
+%             obj.target_points_= [];
+%             obj.target_order_ = [];
             
         end
         
@@ -388,11 +410,12 @@ classdef uniformChebyFMM1D_Tree < handle
             % Local to target.
             
             global kernel_function;
+            global num_expansion_item;
             
             left_point = obj.center_ - obj.half_length_;
             right_point = obj.center_ + obj.half_length_;
             
-            p = length(obj.local_expansion_);
+            p = num_expansion_item;
             
             % Far-field.
 %             for i = 1 : length(obj.target_order_)
@@ -403,29 +426,29 @@ classdef uniformChebyFMM1D_Tree < handle
 %                 end
 %             end
             potential(obj.target_order_) = potential(obj.target_order_) + ...
-                ComputeSp(left_point, right_point, p, obj.target_points_, obj.cheby_points_) * ...
+                ComputeSp2D(left_point, right_point, p, obj.target_points_, obj.cheby_points_) * ...
                 obj.local_expansion_;
             % Near-field.
 %             for i = 1 : length(obj.target_order_)
 %                 for k = 1 : length(obj.source_charges_)
 %                     potential(obj.target_order_(i)) = potential(obj.target_order_(i)) + ...
 %                         obj.source_charges_(k) * ...
-%                         kernel_function(obj.target_points_(i), obj.source_points_(k));
+%                         kernel_function(obj.target_points_(i, :), obj.source_points_(k, :));
 %                 end
 %             end
             potential(obj.target_order_) = potential(obj.target_order_) + ...
-                kernel_function(obj.target_points_, obj.source_points_') * obj.source_charges_;
+                kernel_function(obj.target_points_, obj.source_points_) * obj.source_charges_;
             for t = 1 : length(obj.neighbor_list_)
                 nb_box = obj.neighbor_list_{t};
 %                 for i = 1 : length(obj.target_order_)
 %                     for k = 1 : length(nb_box.source_charges_)
 %                         potential(obj.target_order_(i)) = potential(obj.target_order_(i)) + ...
 %                             nb_box.source_charges_(k) * ...
-%                             kernel_function(obj.target_points_(i), nb_box.source_points_(k));
+%                             kernel_function(obj.target_points_(i, :), nb_box.source_points_(k, :));
 %                     end
 %                 end
                 potential(obj.target_order_) = potential(obj.target_order_) + ...
-                                kernel_function(obj.target_points_, nb_box.source_points_') * nb_box.source_charges_;
+                                kernel_function(obj.target_points_, nb_box.source_points_) * nb_box.source_charges_;
             end
             
         end
