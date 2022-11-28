@@ -12,4 +12,6 @@ MATLAB codes about the fast multipole method (FMM).
 
 ### 1D uniformChebyshev FMM
 
-Jingyu Liu, November 24, 2022.
+### 2D uniformChebyshev FMM
+
+Jingyu Liu, November 28, 2022.

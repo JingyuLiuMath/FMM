@@ -6,7 +6,7 @@ classdef uniformChebyFMM2D_Tree < handle
     % W. Fong and E. Darve. The black-box fast multipole method. Journal of computational physics, 
     % 228(23):8712–8725, 2009.
     
-    % Jingyu Liu, November 27, 2022.
+    % Jingyu Liu, November 28, 2022.
     
     properties
         % Tree information.
