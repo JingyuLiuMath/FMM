@@ -1,6 +1,6 @@
 %% Basic settings.
-n = 20000;
-m = 20000;
+n = 15000;
+m = 15000;
 
 min_points = 512;
 tol = 1e-6;
