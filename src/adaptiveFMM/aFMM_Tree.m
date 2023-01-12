@@ -8,8 +8,6 @@ classdef aFMM_Tree < handle
     
     % Jingyu Liu, November 17, 2022.
     
-    % TODO: Find why aFMM is slow than uniformFMM and fix it.
-    
     properties
         % Tree information.
         level_ = 0;
